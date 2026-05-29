@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -247,6 +248,25 @@
     .feed-filter-btn.active.f-milestone{ background: rgba(255,214,0,0.20);     color: #ffd600; }
     .feed-filter-btn.active.f-poll     { background: rgba(170,0,255,0.20);     color: #cc66ff; }
     .feed-filter-btn:hover { border-color: var(--muted); }
+    .feed-filter-btn { position: relative; }
+    .feed-filter-btn::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: calc(100% + 7px);
+      left: 50%; transform: translateX(-50%);
+      background: #2a2a2a;
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 11px; font-weight: 400;
+      line-height: 1.5; white-space: pre-line;
+      padding: 7px 10px; border-radius: 7px;
+      width: max-content; max-width: 190px;
+      pointer-events: none;
+      opacity: 0; transition: opacity 0.15s;
+      z-index: 200;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    .feed-filter-btn:hover::after { opacity: 1; }
 
     #activity-list {
       flex: 1; overflow-y: auto; padding: 6px 0;
@@ -292,14 +312,19 @@
     /* TABS */
     .tabs-wrap {
       display: flex; align-items: center; gap: 8px;
-      margin-bottom: 22px; flex-wrap: wrap;
+      margin-bottom: 22px;
+    }
+    #channel-tabs {
+      display: flex; gap: 8px; flex: 1; flex-wrap: wrap;
     }
     .tab {
+      flex: 1; min-width: 120px; max-width: 260px;
       padding: 7px 16px; border-radius: 24px;
       border: 1px solid var(--border);
       background: var(--surface); color: var(--muted);
       cursor: pointer; font-size: 13px; font-weight: 600;
       transition: all 0.15s; display: flex; align-items: center; gap: 8px;
+      justify-content: center;
     }
     .tab img { width: 20px; height: 20px; border-radius: 50%; }
     .tab.active { background: var(--red); border-color: var(--red); color: #fff; }
@@ -407,8 +432,11 @@
     /* CHARTS */
     .charts-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      grid-template-columns: repeat(3, 1fr);
       gap: 14px; margin-bottom: 28px;
+    }
+    @media (max-width: 1100px) {
+      .charts-grid { grid-template-columns: repeat(2, 1fr); }
     }
     .chart-card {
       background: var(--surface); border: 1px solid var(--border);
@@ -470,6 +498,17 @@
       color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase;
       border-bottom: 1px solid var(--border);
     }
+    thead th.sortable {
+      cursor: pointer; user-select: none; white-space: nowrap;
+    }
+    thead th.sortable:hover { color: var(--text); }
+    thead th.sorted { color: var(--text); }
+    thead th .sort-arrow {
+      display: inline-block; margin-left: 4px; font-size: 9px;
+      opacity: 0.35; vertical-align: middle;
+    }
+    thead th.sortable:hover .sort-arrow { opacity: 0.7; }
+    thead th.sorted .sort-arrow { opacity: 1; color: var(--red); }
     tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
     tbody tr:last-child { border-bottom: none; }
     tbody tr:hover { background: var(--surface2); }
@@ -622,10 +661,10 @@
         <button class="clear-feed" onclick="clearFeed()">✕ Limpiar</button>
       </div>
       <div class="feed-filters">
-        <button class="feed-filter-btn f-sub active" data-type="sub" onclick="toggleFeedFilter('sub',this)" title="Suscriptores">🔔 Subs</button>
-        <button class="feed-filter-btn f-like active" data-type="like" onclick="toggleFeedFilter('like',this)" title="Likes">👍 Likes</button>
-        <button class="feed-filter-btn f-milestone active" data-type="milestone" onclick="toggleFeedFilter('milestone',this)" title="Hitos de vistas">🎯 Hitos</button>
-        <button class="feed-filter-btn f-poll active" data-type="poll" onclick="toggleFeedFilter('poll',this)" title="Llamadas a la API">📡 API</button>
+        <button class="feed-filter-btn f-sub active" data-type="sub" data-tooltip="Cambios en suscriptores&#10;del canal — ganancias y pérdidas" onclick="toggleFeedFilter('sub',this)">🔔 Subs</button>
+        <button class="feed-filter-btn f-like active" data-type="like" data-tooltip="Likes nuevos en tus videos" onclick="toggleFeedFilter('like',this)">👍 Likes</button>
+        <button class="feed-filter-btn f-milestone active" data-type="milestone" data-tooltip="Hitos de vistas por video&#10;100 · 500 · 1K · 5K · 10K&#10;50K · 100K · 500K · 1M" onclick="toggleFeedFilter('milestone',this)">🎯 Views</button>
+        <button class="feed-filter-btn f-poll active" data-type="poll" data-tooltip="Registro de cada llamada&#10;a la API con fecha y hora" onclick="toggleFeedFilter('poll',this)">📡 API</button>
       </div>
       <div id="activity-list">
         <div class="activity-empty" id="activity-empty">
@@ -724,11 +763,46 @@
 
   // ── VIDEO SORT MODE ────────────────────────────────────────────────────────
   let videoSortMode = 'top'; // 'top' | 'latest'
+  let videoTableSort = { col: null, dir: 'desc' }; // col: null|'title'|'views'|'likes'|'comments'
 
   function setVideoSort(mode) {
     if (videoSortMode === mode) return;
     videoSortMode = mode;
+    videoTableSort = { col: null, dir: 'desc' }; // reset column sort on mode switch
     if (activeChannelId) renderChannel(activeChannelId);
+  }
+
+  function setVideoTableSort(col) {
+    if (videoTableSort.col === col) {
+      videoTableSort.dir = videoTableSort.dir === 'desc' ? 'asc' : 'desc';
+    } else {
+      videoTableSort = { col, dir: 'desc' };
+    }
+    if (activeChannelId) renderChannel(activeChannelId);
+  }
+
+  function sortedVideoList(videos) {
+    const { col, dir } = videoTableSort;
+    if (!col) return videos;
+    return [...videos].sort((a, b) => {
+      let va, vb;
+      if (col === 'title')    { va = a.title.toLowerCase(); vb = b.title.toLowerCase(); }
+      else if (col === 'views')    { va = a.views;    vb = b.views; }
+      else if (col === 'likes')    { va = a.likes;    vb = b.likes; }
+      else if (col === 'comments') { va = a.comments; vb = b.comments; }
+      else return 0;
+      if (va < vb) return dir === 'asc' ? -1 : 1;
+      if (va > vb) return dir === 'asc' ?  1 : -1;
+      return 0;
+    });
+  }
+
+  function thArrow(col) {
+    const arrow = videoTableSort.col === col
+      ? (videoTableSort.dir === 'asc' ? '▲' : '▼')
+      : '↕';
+    const active = videoTableSort.col === col ? ' sorted' : '';
+    return { arrow, active };
   }
 
   // ── POLLING STATE ──────────────────────────────────────────────────────────
@@ -933,12 +1007,11 @@
             if (likeDelta > 0)
               addActivity('like', `<strong>${escHtml(chName)}</strong> — "${escHtml(title)}" recibió ${fmt(likeDelta)} like${likeDelta !== 1 ? 's' : ''}`);
 
-            // Views milestones every 100
-            const prevM = Math.floor(prev.views / 100);
-            const newM  = Math.floor(newViews  / 100);
-            if (newM > prevM) {
-              for (let m = prevM + 1; m <= newM; m++)
-                addActivity('milestone', `<strong>${escHtml(chName)}</strong> — "${escHtml(title)}" superó las <strong>${fmt(m * 100)}</strong> vistas`);
+            // Views milestones — significant thresholds only
+            const VIEW_MILESTONES = [100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000];
+            for (const threshold of VIEW_MILESTONES) {
+              if (prev.views < threshold && newViews >= threshold)
+                addActivity('milestone', `<strong>${escHtml(chName)}</strong> — "${escHtml(title)}" superó las <strong>${fmt(threshold)}</strong> vistas`);
             }
 
             // Update stored data
@@ -1307,6 +1380,14 @@
           <div class="chart-card-title">🎯 Views vs Likes <span class="chart-sub">top ${top8.length}</span></div>
           <div class="chart-wrap"><canvas id="chart-compare"></canvas></div>
         </div>
+        <div class="chart-card">
+          <div class="chart-card-title">⚡ Vistas por día <span class="chart-sub">velocidad del video</span></div>
+          <div class="chart-wrap"><canvas id="chart-velocity"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-card-title">🗣 Ratio comentarios/like <span class="chart-sub">nivel de debate</span></div>
+          <div class="chart-wrap"><canvas id="chart-discuss"></canvas></div>
+        </div>
       </div>
 
       <!-- Videos table -->
@@ -1322,12 +1403,16 @@
         <table>
           <thead>
             <tr>
-              <th>#</th><th>Miniatura</th><th>Título</th>
-              <th>👁 Vistas</th><th>% canal</th><th>👍 Likes</th><th>💬 Comentarios</th>
+              <th>#</th><th>Miniatura</th>
+              <th class="sortable${thArrow('title').active}" onclick="setVideoTableSort('title')">Título<span class="sort-arrow">${thArrow('title').arrow}</span></th>
+              <th class="sortable${thArrow('views').active}" onclick="setVideoTableSort('views')">👁 Vistas<span class="sort-arrow">${thArrow('views').arrow}</span></th>
+              <th>% canal</th>
+              <th class="sortable${thArrow('likes').active}" onclick="setVideoTableSort('likes')">👍 Likes<span class="sort-arrow">${thArrow('likes').arrow}</span></th>
+              <th class="sortable${thArrow('comments').active}" onclick="setVideoTableSort('comments')">💬 Comentarios<span class="sort-arrow">${thArrow('comments').arrow}</span></th>
             </tr>
           </thead>
           <tbody>
-            ${(videoSortMode === 'latest'
+            ${sortedVideoList(videoSortMode === 'latest'
                 ? (ch.latestVideos ?? [...ch.topVideos].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt)))
                 : ch.topVideos
               ).map((v, i) => {
@@ -1418,6 +1503,7 @@
     const labels = top8.map((v, i) => `#${i+1} ${truncate(v.title, 22)}`);
 
     destroyChart('views'); destroyChart('engagement'); destroyChart('comments'); destroyChart('compare');
+    destroyChart('velocity'); destroyChart('discuss');
 
     const baseOptions = (axis = 'x') => ({
       indexAxis: axis,
@@ -1517,6 +1603,50 @@
           plugins: {
             legend: { display: true, labels: { color: CHART_DEFAULTS.color, font: { size: 11 } } },
             tooltip: { callbacks: { label: ctx => ` ${fmt(ctx.raw)} ${ctx.dataset.label.toLowerCase()}` } },
+          },
+        },
+      });
+    }
+
+    // 5. Vistas por día (velocity)
+    const cvVelocity = document.getElementById('chart-velocity');
+    if (cvVelocity) {
+      const now = Date.now();
+      const velocities = top8.map(v => {
+        const ageDays = Math.max(1, Math.floor((now - new Date(v.publishedAt).getTime()) / (1000 * 60 * 60 * 24)));
+        return +(v.views / ageDays).toFixed(1);
+      });
+      chartInstances['velocity'] = new Chart(cvVelocity, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{ data: velocities, backgroundColor: 'rgba(170,0,255,0.6)', borderRadius: 4 }],
+        },
+        options: {
+          ...baseOptions('y'),
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => ` ${fmt(ctx.raw)} vistas/día` }, position: 'nearest' },
+          },
+        },
+      });
+    }
+
+    // 6. Ratio comentarios / like
+    const cvDiscuss = document.getElementById('chart-discuss');
+    if (cvDiscuss) {
+      const ratios = top8.map(v => v.likes > 0 ? +(v.comments / v.likes).toFixed(3) : 0);
+      chartInstances['discuss'] = new Chart(cvDiscuss, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{ data: ratios, backgroundColor: 'rgba(255,109,0,0.6)', borderRadius: 4 }],
+        },
+        options: {
+          ...baseOptions('y'),
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => ` ${ctx.raw} comentarios por like` }, position: 'nearest' },
           },
         },
       });
