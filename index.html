@@ -246,6 +246,7 @@
     .feed-filter-btn.active.f-sub      { background: rgba(255,0,0,0.25);       color: #ff6b6b; }
     .feed-filter-btn.active.f-like     { background: rgba(41,121,255,0.25);    color: #82b1ff; }
     .feed-filter-btn.active.f-milestone{ background: rgba(255,214,0,0.20);     color: #ffd600; }
+    .feed-filter-btn.active.f-comment  { background: rgba(41,121,255,0.25);    color: #82b1ff; }
     .feed-filter-btn.active.f-poll     { background: rgba(170,0,255,0.20);     color: #cc66ff; }
     .feed-filter-btn:hover { border-color: var(--muted); }
     .feed-filter-btn { position: relative; }
@@ -300,6 +301,7 @@
     .act-icon.sub       { background: rgba(255,0,0,0.15); }
     .act-icon.like      { background: rgba(41,121,255,0.15); }
     .act-icon.milestone { background: rgba(255,214,0,0.15); }
+    .act-icon.comment   { background: rgba(41,121,255,0.15); }
     .act-icon.poll      { background: rgba(170,0,255,0.15); }
     .activity-item.is-poll { opacity: 0.7; }
     .activity-item.is-poll:hover { opacity: 1; }
@@ -664,7 +666,8 @@
         <button class="feed-filter-btn f-sub active" data-type="sub" data-tooltip="Cambios en suscriptores&#10;del canal — ganancias y pérdidas" onclick="toggleFeedFilter('sub',this)">🔔 Subs</button>
         <button class="feed-filter-btn f-like active" data-type="like" data-tooltip="Likes nuevos en tus videos" onclick="toggleFeedFilter('like',this)">👍 Likes</button>
         <button class="feed-filter-btn f-milestone active" data-type="milestone" data-tooltip="Hitos de vistas por video&#10;100 · 500 · 1K · 5K · 10K&#10;50K · 100K · 500K · 1M" onclick="toggleFeedFilter('milestone',this)">🎯 Views</button>
-        <button class="feed-filter-btn f-poll active" data-type="poll" data-tooltip="Registro de cada llamada&#10;a la API con fecha y hora" onclick="toggleFeedFilter('poll',this)">📡 API</button>
+        <button class="feed-filter-btn f-comment active" data-type="comment" data-tooltip="Comentarios nuevos&#10;en tus videos" onclick="toggleFeedFilter('comment',this)">💬 Comentarios</button>
+        <button class="feed-filter-btn f-poll" data-type="poll" data-tooltip="Registro de cada llamada&#10;a la API con fecha y hora" onclick="toggleFeedFilter('poll',this)">📡 API</button>
       </div>
       <div id="activity-list">
         <div class="activity-empty" id="activity-empty">
@@ -818,7 +821,7 @@
   const MAX_FEED = 100;
   let feedItems = [];
   let unreadCount = 0;
-  const feedActiveFilters = new Set(['sub', 'like', 'milestone', 'poll']);
+  const feedActiveFilters = new Set(['sub', 'like', 'milestone', 'comment']);
 
   function toggleFeedFilter(type, btn) {
     if (feedActiveFilters.has(type)) {
@@ -844,8 +847,8 @@
   function renderFeed() {
     const list  = document.getElementById('activity-list');
     const empty = document.getElementById('activity-empty');
-    const icons = { sub: '🔔', like: '👍', milestone: '🎯', poll: '📡' };
-    const cls   = { sub: 'sub', like: 'like', milestone: 'milestone', poll: 'poll' };
+    const icons = { sub: '🔔', like: '👍', milestone: '🎯', comment: '💬', poll: '📡' };
+    const cls   = { sub: 'sub', like: 'like', milestone: 'milestone', comment: 'comment', poll: 'poll' };
 
     const visible = feedItems.filter(i => feedActiveFilters.has(i.type));
     if (!visible.length) { empty.style.display = 'block'; list.querySelectorAll('.activity-item').forEach(e => e.remove()); return; }
@@ -936,6 +939,7 @@
     const timeStr = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const dateStr = now.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
 
+    playNotifSound('poll');
     if (newEvents > 0) {
       addActivity('poll', `${dateStr} ${timeStr} — ${newEvents} evento${newEvents !== 1 ? 's' : ''} detectado${newEvents !== 1 ? 's' : ''}`);
     } else {
@@ -992,32 +996,44 @@
         const res = await yt('videos', { part: 'statistics', id: chunk.join(',') });
         if (!res.items) continue;
         for (const v of res.items) {
-          const newViews = parseInt(v.statistics.viewCount || 0);
-          const newLikes = parseInt(v.statistics.likeCount || 0);
+          const newViews    = parseInt(v.statistics.viewCount    || 0);
+          const newLikes    = parseInt(v.statistics.likeCount    || 0);
+          const newComments = parseInt(v.statistics.commentCount || 0);
           const prev = videoSnapshots[v.id];
           const chId = vidToCh[v.id];
           const chName = channelsData[chId]?.title || chId;
-          // Get title from stored data (no need to re-fetch snippet)
-          const storedVid = channelsData[chId]?.topVideos?.find(x => x.id === v.id);
+          const storedVid = channelsData[chId]?.topVideos?.find(x => x.id === v.id)
+                         || channelsData[chId]?.latestVideos?.find(x => x.id === v.id);
           const title = truncate(storedVid?.title || v.id, 38);
 
           if (prev !== undefined) {
             // Likes
             const likeDelta = newLikes - prev.likes;
-            if (likeDelta > 0)
+            if (likeDelta > 0) {
+              playNotifSound('like');
               addActivity('like', `<strong>${escHtml(chName)}</strong> — "${escHtml(title)}" recibió ${fmt(likeDelta)} like${likeDelta !== 1 ? 's' : ''}`);
+            }
+
+            // Comments
+            const commentDelta = newComments - (prev.comments ?? newComments);
+            if (commentDelta > 0) {
+              playNotifSound('comment');
+              addActivity('comment', `<strong>${escHtml(chName)}</strong> — "${escHtml(title)}" recibió ${fmt(commentDelta)} comentario${commentDelta !== 1 ? 's' : ''}`);
+            }
 
             // Views milestones — significant thresholds only
             const VIEW_MILESTONES = [100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000];
             for (const threshold of VIEW_MILESTONES) {
-              if (prev.views < threshold && newViews >= threshold)
+              if (prev.views < threshold && newViews >= threshold) {
+                playNotifSound('milestone');
                 addActivity('milestone', `<strong>${escHtml(chName)}</strong> — "${escHtml(title)}" superó las <strong>${fmt(threshold)}</strong> vistas`);
+              }
             }
 
             // Update stored data
-            if (storedVid) { storedVid.views = newViews; storedVid.likes = newLikes; }
+            if (storedVid) { storedVid.views = newViews; storedVid.likes = newLikes; storedVid.comments = newComments; }
           }
-          videoSnapshots[v.id] = { views: newViews, likes: newLikes };
+          videoSnapshots[v.id] = { views: newViews, likes: newLikes, comments: newComments };
         }
       } catch (e) {
         console.error('Video poll error', e);
@@ -1039,7 +1055,43 @@
     }, 10000);
   }
 
+  // ── NOTIFICATION SOUND ────────────────────────────────────────────────────
+  let audioCtx = null;
+  function getAudioCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+  }
+
+  function playNotifSound(type = 'sub') {
+    try {
+      const ctx = getAudioCtx();
+      // Different tones per event type
+      const profiles = {
+        sub:       { freqs: [880, 1100], dur: 0.12, gap: 0.06, vol: 0.18 },
+        like:      { freqs: [660],       dur: 0.10, gap: 0,    vol: 0.12 },
+        comment:   { freqs: [520, 660],  dur: 0.10, gap: 0.05, vol: 0.12 },
+        milestone: { freqs: [660, 880, 1100], dur: 0.10, gap: 0.05, vol: 0.16 },
+        poll:      { freqs: [320],       dur: 0.07, gap: 0,    vol: 0.07 },
+      };
+      const p = profiles[type] || profiles.sub;
+      let t = ctx.currentTime + 0.05;
+      p.freqs.forEach(freq => {
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, t);
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(p.vol, t + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + p.dur);
+        osc.start(t); osc.stop(t + p.dur + 0.02);
+        t += p.dur + p.gap;
+      });
+    } catch (e) { /* audio blocked, ignore */ }
+  }
+
   function fireNotification(channelId, delta, newTotal) {
+    playNotifSound('sub');
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     const ch = channelsData[channelId];
     new Notification(`${delta > 0 ? '🔔' : '📉'} ${ch?.title || channelId}`, {
@@ -1134,7 +1186,7 @@
       channelIds.push(id); channelsData[id] = data;
       if (!data.hiddenSubs) subSnapshots[id] = data.subscribers;
       const allVids = [...(data.topVideos || []), ...(data.latestVideos || [])];
-      allVids.forEach(v => { videoSnapshots[v.id] = { views: v.views, likes: v.likes }; });
+      allVids.forEach(v => { videoSnapshots[v.id] = { views: v.views, likes: v.likes, comments: v.comments }; });
       persistConfig(); closeModal('modal-add'); renderTabs(); switchTab(id);
     } catch (e) {
       errEl.innerHTML = `<div class="error-box">⚠ ${e.message}</div>`;
@@ -1184,7 +1236,7 @@
       const ch = channelsData[id];
       if (!ch.hiddenSubs) subSnapshots[id] = ch.subscribers;
       const allVids = [...(ch.topVideos || []), ...(ch.latestVideos || [])];
-      allVids.forEach(v => { videoSnapshots[v.id] = { views: v.views, likes: v.likes }; });
+      allVids.forEach(v => { videoSnapshots[v.id] = { views: v.views, likes: v.likes, comments: v.comments }; });
     });
 
     renderTabs();
