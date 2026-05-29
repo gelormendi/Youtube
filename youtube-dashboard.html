@@ -1,0 +1,1583 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>YouTube Dashboard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --surface2: #242424;
+      --border: #2e2e2e;
+      --red: #ff0000;
+      --red-dark: #cc0000;
+      --text: #f1f1f1;
+      --muted: #aaaaaa;
+      --green: #00c853;
+      --yellow: #ffd600;
+      --blue: #2979ff;
+      --purple: #aa00ff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+    }
+
+    /* HEADER */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    header h1 { font-size: 20px; font-weight: 700; }
+    .header-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .badge {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 6px;
+    }
+    .btn-icon {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .btn-icon:hover { background: var(--border); }
+    .btn-icon.hidden { display: none; }
+
+    /* POLL BAR */
+    #poll-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    #poll-bar.hidden { display: none; }
+    .poll-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .poll-dot.active { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .poll-dot.checking { background: var(--yellow); animation: pulse 0.8s ease infinite alternate; }
+    @keyframes pulse { from { opacity: 0.4; } to { opacity: 1; } }
+    .poll-interval-wrap { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+    .poll-interval-wrap select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .poll-toggle {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 6px;
+      padding: 3px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .poll-toggle:hover { border-color: var(--red); color: var(--red); }
+    .poll-toggle.on { border-color: var(--green); color: var(--green); }
+
+    /* SETUP */
+    #setup {
+      max-width: 580px;
+      margin: 60px auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px;
+    }
+    #setup h2 { font-size: 22px; margin-bottom: 8px; }
+    #setup p { color: var(--muted); font-size: 14px; margin-bottom: 28px; line-height: 1.6; }
+    .form-group { margin-bottom: 20px; }
+    .form-group label {
+      display: block;
+      font-size: 12px; font-weight: 700;
+      color: var(--muted);
+      margin-bottom: 8px;
+      letter-spacing: 0.5px; text-transform: uppercase;
+    }
+    .form-group input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 11px 14px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: 'Courier New', monospace;
+      transition: border-color 0.15s;
+    }
+    .form-group input:focus { outline: none; border-color: var(--red); }
+    .form-group small { display: block; color: var(--muted); font-size: 12px; margin-top: 6px; line-height: 1.5; }
+    .channel-list-setup { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+    .channel-entry {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 12px;
+      animation: slideIn 0.15s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .channel-entry .ch-id {
+      font-family: 'Courier New', monospace; font-size: 13px;
+      color: var(--muted); flex: 1;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .channel-entry .remove-btn {
+      background: none; border: none; color: var(--muted);
+      cursor: pointer; font-size: 18px; line-height: 1; padding: 0 4px;
+      transition: color 0.15s; flex-shrink: 0;
+    }
+    .channel-entry .remove-btn:hover { color: var(--red); }
+    .add-channel-row { display: flex; gap: 8px; }
+    .add-channel-row input {
+      flex: 1; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 14px; color: var(--text);
+      font-size: 13px; font-family: 'Courier New', monospace;
+    }
+    .add-channel-row input:focus { outline: none; border-color: var(--red); }
+    .add-channel-row input::placeholder { color: var(--muted); }
+    .btn-add {
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); border-radius: 8px;
+      padding: 10px 16px; font-size: 18px;
+      cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+    }
+    .btn-add:hover { background: var(--red); border-color: var(--red); }
+    .btn-primary {
+      width: 100%; background: var(--red); color: #fff;
+      border: none; border-radius: 8px; padding: 14px;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      transition: background 0.15s; margin-top: 4px;
+    }
+    .btn-primary:hover { background: var(--red-dark); }
+
+    /* MAIN LAYOUT */
+    #main { display: none; }
+    .main-flex { display: flex; align-items: flex-start; }
+    #main-content { flex: 1; min-width: 0; padding: 28px 24px 40px 32px; }
+
+    /* ACTIVITY PANEL */
+    #activity-panel {
+      width: 290px; flex-shrink: 0;
+      position: sticky; top: 89px;
+      max-height: calc(100vh - 89px);
+      display: flex; flex-direction: column;
+      border-left: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .activity-header {
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .activity-header h3 { font-size: 13px; font-weight: 700; flex: 1; }
+    .activity-count {
+      background: var(--red); color: #fff;
+      font-size: 10px; font-weight: 800;
+      padding: 2px 7px; border-radius: 10px; display: none;
+    }
+    .activity-count.visible { display: inline-block; }
+    .clear-feed {
+      background: none; border: none; color: var(--muted);
+      font-size: 11px; cursor: pointer; padding: 2px 6px;
+      border-radius: 4px; transition: color 0.15s;
+    }
+    .clear-feed:hover { color: var(--red); }
+
+    /* Feed filters */
+    .feed-filters {
+      display: flex; gap: 5px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .feed-filter-btn {
+      display: flex; align-items: center; gap: 4px;
+      padding: 3px 9px; border-radius: 20px;
+      border: 1px solid var(--border);
+      background: var(--surface2); color: var(--muted);
+      font-size: 11px; cursor: pointer;
+      transition: all 0.15s; user-select: none;
+    }
+    .feed-filter-btn.active {
+      color: var(--text);
+      border-color: transparent;
+    }
+    .feed-filter-btn.active.f-sub      { background: rgba(255,0,0,0.25);       color: #ff6b6b; }
+    .feed-filter-btn.active.f-like     { background: rgba(41,121,255,0.25);    color: #82b1ff; }
+    .feed-filter-btn.active.f-milestone{ background: rgba(255,214,0,0.20);     color: #ffd600; }
+    .feed-filter-btn.active.f-poll     { background: rgba(170,0,255,0.20);     color: #cc66ff; }
+    .feed-filter-btn:hover { border-color: var(--muted); }
+
+    #activity-list {
+      flex: 1; overflow-y: auto; padding: 6px 0;
+      scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+    }
+    #activity-list::-webkit-scrollbar { width: 4px; }
+    #activity-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .activity-empty {
+      padding: 36px 18px; text-align: center;
+      color: var(--muted); font-size: 12px; line-height: 1.7;
+    }
+    .activity-empty .empty-icon { font-size: 26px; margin-bottom: 10px; }
+    .activity-item {
+      display: flex; gap: 10px;
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      animation: fadeSlide 0.25s ease;
+      transition: background 0.1s;
+    }
+    .activity-item:last-child { border-bottom: none; }
+    .activity-item:hover { background: var(--surface2); }
+    @keyframes fadeSlide {
+      from { opacity: 0; transform: translateX(8px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .act-icon {
+      width: 26px; height: 26px; border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; flex-shrink: 0; margin-top: 1px;
+    }
+    .act-icon.sub       { background: rgba(255,0,0,0.15); }
+    .act-icon.like      { background: rgba(41,121,255,0.15); }
+    .act-icon.milestone { background: rgba(255,214,0,0.15); }
+    .act-icon.poll      { background: rgba(170,0,255,0.15); }
+    .activity-item.is-poll { opacity: 0.7; }
+    .activity-item.is-poll:hover { opacity: 1; }
+    .act-text.no-news   { color: var(--muted); font-style: italic; }
+    .act-body { flex: 1; min-width: 0; }
+    .act-text { font-size: 11.5px; line-height: 1.5; color: var(--text); }
+    .act-text strong { font-weight: 700; }
+    .act-time { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+    /* TABS */
+    .tabs-wrap {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 22px; flex-wrap: wrap;
+    }
+    .tab {
+      padding: 7px 16px; border-radius: 24px;
+      border: 1px solid var(--border);
+      background: var(--surface); color: var(--muted);
+      cursor: pointer; font-size: 13px; font-weight: 600;
+      transition: all 0.15s; display: flex; align-items: center; gap: 8px;
+    }
+    .tab img { width: 20px; height: 20px; border-radius: 50%; }
+    .tab.active { background: var(--red); border-color: var(--red); color: #fff; }
+    .tab:hover:not(.active) { border-color: var(--muted); color: var(--text); }
+    .tab .tab-remove { font-size: 14px; opacity: 0.6; line-height: 1; margin-left: 2px; }
+    .tab .tab-remove:hover { opacity: 1; }
+    .btn-add-channel-tab {
+      padding: 7px 14px; border-radius: 24px;
+      border: 1px dashed var(--border); background: none; color: var(--muted);
+      cursor: pointer; font-size: 13px; font-weight: 600;
+      transition: all 0.15s; display: flex; align-items: center; gap: 6px;
+    }
+    .btn-add-channel-tab:hover { border-color: var(--red); color: var(--red); }
+
+    /* STATS */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px; margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 18px 20px;
+    }
+    .stat-card .label {
+      font-size: 11px; font-weight: 700; color: var(--muted);
+      letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 10px;
+    }
+    .stat-card .value { font-size: 28px; font-weight: 800; letter-spacing: -1px; line-height: 1; }
+    .stat-card .sub { font-size: 11px; color: var(--muted); margin-top: 6px; }
+    .stat-card.red .value    { color: var(--red); }
+    .stat-card.green .value  { color: var(--green); }
+    .stat-card.blue .value   { color: var(--blue); }
+    .stat-card.yellow .value { color: var(--yellow); }
+    .delta {
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: 11px; font-weight: 700;
+      padding: 2px 7px; border-radius: 12px;
+      margin-left: 8px; vertical-align: middle;
+    }
+    .delta.up   { background: rgba(0,200,83,0.15); color: var(--green); }
+    .delta.down { background: rgba(255,0,0,0.1);   color: var(--red); }
+
+    /* MONETIZATION */
+    .section-title {
+      font-size: 14px; font-weight: 700;
+      margin-bottom: 14px; display: flex; align-items: center; gap: 10px;
+    }
+    .section-title .tag {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; font-size: 11px; color: var(--muted); padding: 2px 8px;
+      font-weight: 500;
+    }
+    .monetization-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px; margin-bottom: 28px;
+    }
+    .mono-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px 18px;
+    }
+    .mono-card.achieved {
+      border-color: rgba(0,200,83,0.4);
+      background: rgba(0,200,83,0.05);
+    }
+    .mono-card.achieved .mono-label { color: var(--green); }
+    .mono-top {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+    }
+    .mono-icon { font-size: 22px; flex-shrink: 0; }
+    .mono-info { flex: 1; min-width: 0; }
+    .mono-label { font-size: 13px; font-weight: 700; }
+    .mono-desc  { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+    .mono-badge {
+      font-size: 10px; font-weight: 700;
+      padding: 3px 8px; border-radius: 10px; flex-shrink: 0;
+    }
+    .mono-badge.done { background: rgba(0,200,83,0.2); color: var(--green); }
+    .mono-badge.todo { background: var(--surface2); color: var(--muted); }
+    .progress-bar-wrap {
+      background: var(--surface2); border-radius: 100px;
+      height: 6px; overflow: hidden; margin-bottom: 6px;
+    }
+    .progress-bar {
+      height: 100%; border-radius: 100px;
+      transition: width 0.6s ease;
+    }
+    .progress-bar.red    { background: var(--red); }
+    .progress-bar.yellow { background: var(--yellow); }
+    .progress-bar.green  { background: var(--green); }
+    .progress-bar.blue   { background: var(--blue); }
+    .progress-bar.purple { background: var(--purple); }
+    .progress-label {
+      display: flex; justify-content: space-between;
+      font-size: 11px; color: var(--muted);
+    }
+    .mono-note {
+      font-size: 11px; color: var(--muted);
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 14px;
+      margin-bottom: 28px; line-height: 1.6;
+    }
+
+    /* CHARTS */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 14px; margin-bottom: 28px;
+    }
+    .chart-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px 20px 16px;
+    }
+    .chart-card-title {
+      font-size: 13px; font-weight: 700; color: var(--text);
+      margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+    }
+    .chart-card-title .chart-sub {
+      font-size: 11px; color: var(--muted); font-weight: 400;
+    }
+    .chart-wrap { position: relative; height: 220px; overflow: visible; }
+    .chart-card { overflow: visible; }
+
+    /* PROFILE */
+    .channel-profile {
+      display: flex; align-items: center; gap: 16px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;
+    }
+    .channel-profile img { width: 56px; height: 56px; border-radius: 50%; border: 2px solid var(--border); }
+    .channel-profile .info h2 { font-size: 18px; font-weight: 700; }
+    .channel-profile .info p  { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .channel-profile .yt-link {
+      margin-left: auto;
+      background: var(--red); color: #fff;
+      padding: 7px 14px; border-radius: 8px;
+      text-decoration: none; font-size: 13px; font-weight: 700; white-space: nowrap;
+    }
+
+    /* VIDEO SORT TOGGLE */
+    .video-sort-toggle {
+      margin-left: auto;
+      display: flex; gap: 4px;
+    }
+    .vsort-btn {
+      padding: 3px 12px; border-radius: 20px;
+      border: 1px solid var(--border);
+      background: var(--surface2); color: var(--muted);
+      font-size: 11px; font-weight: 600; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .vsort-btn:hover { border-color: var(--muted); color: var(--text); }
+    .vsort-btn.active {
+      background: var(--red); border-color: var(--red);
+      color: #fff;
+    }
+
+    /* VIDEOS TABLE */
+    .videos-table-wrap {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      background: var(--surface2); padding: 11px 12px;
+      text-align: left; font-size: 11px; font-weight: 700;
+      color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--surface2); }
+    tbody td { padding: 11px 12px; font-size: 13px; vertical-align: middle; }
+    .video-thumb { width: 72px; height: 41px; object-fit: cover; border-radius: 4px; display: block; }
+    .video-title-cell { max-width: 240px; }
+    .video-title-cell a {
+      color: var(--text); text-decoration: none; font-weight: 600; line-height: 1.4;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .video-title-cell a:hover { color: var(--red); }
+    .video-title-cell .pub-date { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .num { font-variant-numeric: tabular-nums; font-weight: 700; }
+    .num.views    { color: var(--text); }
+    .num.likes    { color: var(--green); }
+    .num.comments { color: var(--blue); }
+    .rank {
+      width: 24px; height: 24px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 800;
+      background: var(--surface2); color: var(--muted);
+    }
+    .rank.gold   { background: #ffd600; color: #000; }
+    .rank.silver { background: #9e9e9e; color: #000; }
+    .rank.bronze { background: #bf7835; color: #fff; }
+    .dislike-note { font-size: 11px; color: var(--muted); margin-top: 10px; }
+
+    /* MODALS */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 200;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 32px;
+      width: 480px; max-width: 95vw;
+    }
+    .modal h3 { font-size: 18px; margin-bottom: 6px; }
+    .modal p  { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+    .btn-cancel {
+      flex: 1; background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); border-radius: 8px; padding: 12px;
+      font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s;
+    }
+    .btn-cancel:hover { background: var(--border); }
+    .btn-confirm {
+      flex: 1; background: var(--red); border: none; color: #fff;
+      border-radius: 8px; padding: 12px;
+      font-size: 14px; font-weight: 700; cursor: pointer; transition: background 0.15s;
+    }
+    .btn-confirm:hover { background: var(--red-dark); }
+    .btn-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* LOADING / ERROR */
+    .loading {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 14px; padding: 60px; color: var(--muted);
+    }
+    .spinner {
+      width: 34px; height: 34px;
+      border: 3px solid var(--border); border-top-color: var(--red);
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-box {
+      background: #1a0a0a; border: 1px solid #4d1a1a;
+      border-radius: 10px; padding: 18px 22px;
+      color: #ff7070; font-size: 14px; line-height: 1.6; margin: 16px 0;
+    }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
+    <rect width="28" height="28" rx="6" fill="#FF0000"/>
+    <path d="M11 9.5L20 14L11 18.5V9.5Z" fill="white"/>
+  </svg>
+  <h1>YouTube Dashboard</h1>
+  <div class="header-actions">
+    <span class="badge hidden" id="last-updated"></span>
+    <button class="btn-icon hidden" id="refresh-btn" onclick="refreshData()">↻ Actualizar</button>
+    <button class="btn-icon hidden" id="settings-btn" onclick="openSettings()">⚙ API Key</button>
+  </div>
+</header>
+
+<div id="poll-bar" class="hidden">
+  <div class="poll-dot" id="poll-dot"></div>
+  <span id="poll-status">Monitoreo pausado</span>
+  <div class="poll-interval-wrap">
+    <span>Revisar cada</span>
+    <select id="poll-interval" onchange="updatePollInterval()">
+      <option value="1">1 min</option>
+      <option value="5" selected>5 min</option>
+      <option value="10">10 min</option>
+      <option value="30">30 min</option>
+    </select>
+    <button class="poll-toggle" id="poll-toggle-btn" onclick="togglePolling()">▶ Activar</button>
+  </div>
+</div>
+
+<!-- SETUP -->
+<div id="setup">
+  <h2>⚡ Configuración inicial</h2>
+  <p>Ingresá tu API Key y sumá los canales que querés monitorear. Todo queda guardado localmente en tu browser.</p>
+  <div class="form-group">
+    <label>API Key de YouTube Data v3</label>
+    <input type="password" id="api-key" placeholder="AIzaSy..." autocomplete="off" />
+    <small>Google Cloud Console → APIs & Services → YouTube Data API v3 → Credentials</small>
+  </div>
+  <div class="form-group">
+    <label>Canales a monitorear</label>
+    <div class="channel-list-setup" id="setup-channel-list"></div>
+    <div class="add-channel-row">
+      <input type="text" id="new-channel-input" placeholder="UCxxxxxxxxxxxxxxxxxxxxxxxxx"
+             onkeydown="if(event.key==='Enter') addChannelToSetup()" />
+      <button class="btn-add" onclick="addChannelToSetup()">+</button>
+    </div>
+    <small>El ID empieza con "UC". Lo encontrás en youtube.com/channel/UC...</small>
+  </div>
+  <div class="form-group">
+    <label>Top videos a mostrar por canal</label>
+    <input type="number" id="top-n" value="10" min="1" max="50" style="font-family:inherit" />
+  </div>
+  <div id="setup-error"></div>
+  <button class="btn-primary" onclick="startDashboard()">Cargar Dashboard →</button>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+  <div class="main-flex">
+    <div id="main-content">
+      <div class="tabs-wrap">
+        <div id="channel-tabs"></div>
+        <button class="btn-add-channel-tab" onclick="openAddChannelModal()">+ Agregar canal</button>
+      </div>
+      <div id="channel-content"></div>
+    </div>
+
+    <!-- Activity panel -->
+    <div id="activity-panel">
+      <div class="activity-header">
+        <h3>⚡ Actividad</h3>
+        <span class="activity-count" id="activity-count"></span>
+        <button class="clear-feed" onclick="clearFeed()">✕ Limpiar</button>
+      </div>
+      <div class="feed-filters">
+        <button class="feed-filter-btn f-sub active" data-type="sub" onclick="toggleFeedFilter('sub',this)" title="Suscriptores">🔔 Subs</button>
+        <button class="feed-filter-btn f-like active" data-type="like" onclick="toggleFeedFilter('like',this)" title="Likes">👍 Likes</button>
+        <button class="feed-filter-btn f-milestone active" data-type="milestone" onclick="toggleFeedFilter('milestone',this)" title="Hitos de vistas">🎯 Hitos</button>
+        <button class="feed-filter-btn f-poll active" data-type="poll" onclick="toggleFeedFilter('poll',this)" title="Llamadas a la API">📡 API</button>
+      </div>
+      <div id="activity-list">
+        <div class="activity-empty" id="activity-empty">
+          <div class="empty-icon">📡</div>
+          Activá el monitoreo para ver eventos en tiempo real.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL Agregar canal -->
+<div class="modal-overlay hidden" id="modal-add">
+  <div class="modal">
+    <h3>➕ Agregar canal</h3>
+    <p>Ingresá el Channel ID del canal que querés sumar al dashboard.</p>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Channel ID</label>
+      <input type="text" id="modal-channel-id" placeholder="UCxxxxxxxxxxxxxxxxxxxxxxxxx"
+             onkeydown="if(event.key==='Enter') confirmAddChannel()" />
+    </div>
+    <div id="modal-error" style="margin-top:12px"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('modal-add')">Cancelar</button>
+      <button class="btn-confirm" id="modal-add-btn" onclick="confirmAddChannel()">Agregar →</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL Settings -->
+<div class="modal-overlay hidden" id="modal-settings">
+  <div class="modal">
+    <h3>⚙ Configuración</h3>
+    <p>Actualizá tu API Key o el número de videos a mostrar.</p>
+    <div class="form-group">
+      <label>API Key</label>
+      <input type="password" id="settings-api-key" autocomplete="off" />
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Top videos por canal</label>
+      <input type="number" id="settings-top-n" min="1" max="50" style="font-family:inherit" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('modal-settings')">Cancelar</button>
+      <button class="btn-confirm" onclick="saveSettings()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API_BASE = 'https://www.googleapis.com/youtube/v3';
+  let apiKey = '';
+  let channelIds = [];
+  let topN = 10;
+  let channelsData = {};
+  let activeChannelId = null;
+
+  // Chart instances (destroy before re-creating)
+  const chartInstances = {};
+
+  // ── MONETIZATION MILESTONES ────────────────────────────────────────────────
+  const MONO_MILESTONES = [
+    {
+      key: 'ypp_basic',
+      icon: '🌱',
+      label: 'YPP Básico',
+      desc: '500 suscriptores · acceso a Super Thanks y membresías',
+      subsNeeded: 500,
+      color: 'green',
+    },
+    {
+      key: 'ypp_full',
+      icon: '💰',
+      label: 'YPP Completo',
+      desc: '1,000 subs + 4,000h de visualización · monetización por anuncios',
+      subsNeeded: 1000,
+      color: 'yellow',
+    },
+    {
+      key: 'silver',
+      icon: '🥈',
+      label: 'Placa Plateada',
+      desc: '100,000 suscriptores',
+      subsNeeded: 100000,
+      color: 'blue',
+    },
+    {
+      key: 'gold',
+      icon: '🥇',
+      label: 'Placa Dorada',
+      desc: '1,000,000 suscriptores',
+      subsNeeded: 1000000,
+      color: 'red',
+    },
+  ];
+
+  // ── VIDEO SORT MODE ────────────────────────────────────────────────────────
+  let videoSortMode = 'top'; // 'top' | 'latest'
+
+  function setVideoSort(mode) {
+    if (videoSortMode === mode) return;
+    videoSortMode = mode;
+    if (activeChannelId) renderChannel(activeChannelId);
+  }
+
+  // ── POLLING STATE ──────────────────────────────────────────────────────────
+  let pollTimer = null;
+  let pollIntervalMinutes = 5;
+  let pollActive = false;
+  let subSnapshots   = {};
+  let videoSnapshots = {};
+  let sessionDeltas  = {};
+  let nextPollAt = null;
+
+  // ── ACTIVITY FEED ─────────────────────────────────────────────────────────
+  const MAX_FEED = 100;
+  let feedItems = [];
+  let unreadCount = 0;
+  const feedActiveFilters = new Set(['sub', 'like', 'milestone', 'poll']);
+
+  function toggleFeedFilter(type, btn) {
+    if (feedActiveFilters.has(type)) {
+      // Don't allow deactivating all filters
+      if (feedActiveFilters.size === 1) return;
+      feedActiveFilters.delete(type);
+      btn.classList.remove('active');
+    } else {
+      feedActiveFilters.add(type);
+      btn.classList.add('active');
+    }
+    renderFeed();
+  }
+
+  function addActivity(type, text, extra = {}) {
+    feedItems.unshift({ type, text, ts: new Date(), ...extra });
+    if (feedItems.length > MAX_FEED) feedItems.pop();
+    if (type !== 'poll') unreadCount++;   // API poll entries don't bump the unread badge
+    renderFeed();
+    updateActivityCount();
+  }
+
+  function renderFeed() {
+    const list  = document.getElementById('activity-list');
+    const empty = document.getElementById('activity-empty');
+    const icons = { sub: '🔔', like: '👍', milestone: '🎯', poll: '📡' };
+    const cls   = { sub: 'sub', like: 'like', milestone: 'milestone', poll: 'poll' };
+
+    const visible = feedItems.filter(i => feedActiveFilters.has(i.type));
+    if (!visible.length) { empty.style.display = 'block'; list.querySelectorAll('.activity-item').forEach(e => e.remove()); return; }
+    empty.style.display = 'none';
+    list.querySelectorAll('.activity-item').forEach(e => e.remove());
+
+    visible.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'activity-item' + (item.type === 'poll' ? ' is-poll' : '');
+      const isNoNews = item.type === 'poll' && item.noNews;
+      el.innerHTML = `
+        <div class="act-icon ${cls[item.type] || 'sub'}">${icons[item.type] || '•'}</div>
+        <div class="act-body">
+          <div class="act-text ${item.noNews ? 'no-news' : ''}">${item.text}</div>
+          <div class="act-time">${formatTime(item.ts)}</div>
+        </div>`;
+      list.appendChild(el);
+    });
+  }
+
+  function updateActivityCount() {
+    const el = document.getElementById('activity-count');
+    if (unreadCount > 0) { el.textContent = unreadCount > 99 ? '99+' : unreadCount; el.classList.add('visible'); }
+    else el.classList.remove('visible');
+  }
+
+  function clearFeed() { feedItems = []; unreadCount = 0; renderFeed(); updateActivityCount(); }
+
+  // ── POLLING ───────────────────────────────────────────────────────────────
+  function togglePolling() { pollActive ? stopPolling() : requestNotifPermission().then(startPolling); }
+  function updatePollInterval() {
+    pollIntervalMinutes = parseInt(document.getElementById('poll-interval').value);
+    if (pollActive) { stopPolling(); startPolling(); }
+  }
+  async function requestNotifPermission() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'default') await Notification.requestPermission();
+    if (Notification.permission === 'denied') {
+      setPollError('Notificaciones bloqueadas — habilitá los permisos en tu navegador');
+    }
+  }
+  function startPolling() {
+    pollActive = true; updatePollUI();
+    runPollCycle();
+    pollTimer = setInterval(runPollCycle, pollIntervalMinutes * 60 * 1000);
+    startCountdown();
+  }
+  function stopPolling() {
+    pollActive = false; clearInterval(pollTimer); clearInterval(window._countdown);
+    pollTimer = null; updatePollUI();
+  }
+  function updatePollUI() {
+    const btn = document.getElementById('poll-toggle-btn');
+    const dot = document.getElementById('poll-dot');
+    if (pollActive) {
+      btn.textContent = '⏹ Detener'; btn.classList.add('on');
+      dot.classList.add('active'); dot.classList.remove('checking');
+    } else {
+      btn.textContent = '▶ Activar'; btn.classList.remove('on');
+      dot.classList.remove('active','checking');
+      document.getElementById('poll-status').textContent = 'Monitoreo pausado';
+    }
+  }
+  function startCountdown() {
+    clearInterval(window._countdown);
+    nextPollAt = Date.now() + pollIntervalMinutes * 60 * 1000;
+    window._countdown = setInterval(() => {
+      if (!pollActive) return;
+      const r = Math.max(0, nextPollAt - Date.now());
+      const m = Math.floor(r / 60000), s = Math.floor((r % 60000) / 1000);
+      document.getElementById('poll-status').textContent = `Próxima revisión en ${m}:${String(s).padStart(2,'0')}`;
+    }, 1000);
+  }
+
+  async function runPollCycle() {
+    if (!channelIds.length || !apiKey) return;
+    const dot = document.getElementById('poll-dot');
+    dot.classList.add('checking'); dot.classList.remove('active');
+    document.getElementById('poll-status').textContent = 'Revisando...';
+
+    const countBefore = feedItems.filter(i => i.type !== 'poll').length;
+    await pollSubscribers();
+    await pollVideoStats();
+    const countAfter = feedItems.filter(i => i.type !== 'poll').length;
+
+    const newEvents = countAfter - countBefore;
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const dateStr = now.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+
+    if (newEvents > 0) {
+      addActivity('poll', `${dateStr} ${timeStr} — ${newEvents} evento${newEvents !== 1 ? 's' : ''} detectado${newEvents !== 1 ? 's' : ''}`);
+    } else {
+      addActivity('poll', `${dateStr} ${timeStr} — No News`, { noNews: true });
+    }
+
+    dot.classList.remove('checking');
+    if (pollActive) dot.classList.add('active');
+    updateTimestamp();
+    nextPollAt = Date.now() + pollIntervalMinutes * 60 * 1000;
+    startCountdown();
+  }
+
+  async function pollSubscribers() {
+    for (const id of channelIds) {
+      try {
+        const res = await yt('channels', { part: 'statistics', id });
+        if (!res.items?.length) continue;
+        const stats = res.items[0].statistics;
+        if (stats.hiddenSubscriberCount) continue;
+        const newCount = parseInt(stats.subscriberCount || 0);
+        const prev = subSnapshots[id];
+        if (prev !== undefined && newCount !== prev) {
+          const delta = newCount - prev;
+          sessionDeltas[id] = (sessionDeltas[id] || 0) + delta;
+          if (channelsData[id]) channelsData[id].subscribers = newCount;
+          if (id === activeChannelId) renderChannel(id);
+          const name = channelsData[id]?.title || id;
+          addActivity('sub', delta > 0
+            ? `<strong>${escHtml(name)}</strong> ganó ${fmt(Math.abs(delta))} suscriptor${Math.abs(delta) !== 1 ? 'es' : ''}`
+            : `<strong>${escHtml(name)}</strong> perdió ${fmt(Math.abs(delta))} suscriptor${Math.abs(delta) !== 1 ? 'es' : ''}`
+          );
+          fireNotification(id, delta, newCount);
+        }
+        subSnapshots[id] = newCount;
+      } catch (e) {
+        console.error('Sub poll error', id, e);
+        setPollError(`Error al consultar subs: ${e.message}`);
+      }
+    }
+  }
+
+  async function pollVideoStats() {
+    const allIds = [], vidToCh = {};
+    for (const chId of channelIds) {
+      (channelsData[chId]?.topVideos || []).forEach(v => { allIds.push(v.id); vidToCh[v.id] = chId; });
+    }
+    if (!allIds.length) return;
+
+    for (let i = 0; i < allIds.length; i += 50) {
+      const chunk = allIds.slice(i, i + 50);
+      try {
+        // Only request 'statistics' — title/snippet already stored in channelsData
+        const res = await yt('videos', { part: 'statistics', id: chunk.join(',') });
+        if (!res.items) continue;
+        for (const v of res.items) {
+          const newViews = parseInt(v.statistics.viewCount || 0);
+          const newLikes = parseInt(v.statistics.likeCount || 0);
+          const prev = videoSnapshots[v.id];
+          const chId = vidToCh[v.id];
+          const chName = channelsData[chId]?.title || chId;
+          // Get title from stored data (no need to re-fetch snippet)
+          const storedVid = channelsData[chId]?.topVideos?.find(x => x.id === v.id);
+          const title = truncate(storedVid?.title || v.id, 38);
+
+          if (prev !== undefined) {
+            // Likes
+            const likeDelta = newLikes - prev.likes;
+            if (likeDelta > 0)
+              addActivity('like', `<strong>${escHtml(chName)}</strong> — "${escHtml(title)}" recibió ${fmt(likeDelta)} like${likeDelta !== 1 ? 's' : ''}`);
+
+            // Views milestones every 100
+            const prevM = Math.floor(prev.views / 100);
+            const newM  = Math.floor(newViews  / 100);
+            if (newM > prevM) {
+              for (let m = prevM + 1; m <= newM; m++)
+                addActivity('milestone', `<strong>${escHtml(chName)}</strong> — "${escHtml(title)}" superó las <strong>${fmt(m * 100)}</strong> vistas`);
+            }
+
+            // Update stored data
+            if (storedVid) { storedVid.views = newViews; storedVid.likes = newLikes; }
+          }
+          videoSnapshots[v.id] = { views: newViews, likes: newLikes };
+        }
+      } catch (e) {
+        console.error('Video poll error', e);
+        setPollError(`Error al consultar videos: ${e.message}`);
+      }
+    }
+  }
+
+  function setPollError(msg) {
+    const dot = document.getElementById('poll-dot');
+    const status = document.getElementById('poll-status');
+    if (dot) { dot.classList.remove('active', 'checking'); dot.style.background = 'var(--red)'; }
+    if (status) status.textContent = `⚠ ${msg}`;
+    // Auto-clear error style after 10s
+    clearTimeout(window._pollErrTimer);
+    window._pollErrTimer = setTimeout(() => {
+      if (dot) { dot.style.background = ''; if (pollActive) dot.classList.add('active'); }
+      if (status) status.textContent = 'Monitoreo activo';
+    }, 10000);
+  }
+
+  function fireNotification(channelId, delta, newTotal) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const ch = channelsData[channelId];
+    new Notification(`${delta > 0 ? '🔔' : '📉'} ${ch?.title || channelId}`, {
+      body: `${delta > 0 ? '+' : ''}${fmt(delta)} suscriptor${Math.abs(delta) !== 1 ? 'es' : ''} · Total: ${fmt(newTotal)}`,
+      icon: ch?.thumbnail || '',
+      tag: `yt-sub-${channelId}`,
+    });
+  }
+
+  // ── BOOT ──────────────────────────────────────────────────────────────────
+  function init() {
+    const saved = loadConfig();
+    if (saved?.apiKey && saved?.channelIds?.length) {
+      apiKey = saved.apiKey; channelIds = saved.channelIds; topN = saved.topN || 10;
+      enterDashboard(); loadAllChannels();
+    }
+  }
+  function loadConfig() { try { return JSON.parse(localStorage.getItem('yt_cfg') || 'null'); } catch { return null; } }
+  function persistConfig() { localStorage.setItem('yt_cfg', JSON.stringify({ apiKey, channelIds, topN })); }
+
+  // ── SETUP ─────────────────────────────────────────────────────────────────
+  const setupIds = [];
+  function addChannelToSetup() {
+    const input = document.getElementById('new-channel-input');
+    const val = input.value.trim();
+    if (!val || setupIds.includes(val)) { input.value = ''; return; }
+    setupIds.push(val); input.value = '';
+    renderSetupList(); input.focus();
+  }
+  function removeSetupChannel(id) { setupIds.splice(setupIds.indexOf(id), 1); renderSetupList(); }
+  function renderSetupList() {
+    document.getElementById('setup-channel-list').innerHTML = setupIds.map(id => `
+      <div class="channel-entry">
+        <div class="ch-id">📺 ${id}</div>
+        <button class="remove-btn" onclick="removeSetupChannel('${id}')">×</button>
+      </div>`).join('');
+  }
+  function startDashboard() {
+    const key = document.getElementById('api-key').value.trim();
+    const n   = parseInt(document.getElementById('top-n').value) || 10;
+    const errEl = document.getElementById('setup-error');
+    errEl.innerHTML = '';
+    const inlineId = document.getElementById('new-channel-input').value.trim();
+    if (inlineId && !setupIds.includes(inlineId)) setupIds.push(inlineId);
+    if (!key)          { errEl.innerHTML = '<div class="error-box">⚠ Ingresá tu API Key.</div>'; return; }
+    if (!setupIds.length) { errEl.innerHTML = '<div class="error-box">⚠ Agregá al menos un canal.</div>'; return; }
+    apiKey = key; channelIds = [...setupIds]; topN = n;
+    persistConfig(); enterDashboard(); loadAllChannels();
+  }
+  function enterDashboard() {
+    document.getElementById('setup').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
+    document.getElementById('poll-bar').classList.remove('hidden');
+    document.getElementById('refresh-btn').classList.remove('hidden');
+    document.getElementById('settings-btn').classList.remove('hidden');
+  }
+
+  // ── SETTINGS ──────────────────────────────────────────────────────────────
+  function openSettings() {
+    document.getElementById('settings-api-key').value = apiKey;
+    document.getElementById('settings-top-n').value = topN;
+    document.getElementById('modal-settings').classList.remove('hidden');
+  }
+  function saveSettings() {
+    const key = document.getElementById('settings-api-key').value.trim();
+    const n   = parseInt(document.getElementById('settings-top-n').value) || 10;
+    if (!key) return;
+    apiKey = key; topN = n; persistConfig();
+    closeModal('modal-settings'); channelsData = {}; loadAllChannels();
+  }
+
+  // ── ADD / REMOVE CHANNEL ──────────────────────────────────────────────────
+  function openAddChannelModal() {
+    document.getElementById('modal-channel-id').value = '';
+    document.getElementById('modal-error').innerHTML = '';
+    const btn = document.getElementById('modal-add-btn');
+    btn.disabled = false; btn.textContent = 'Agregar →';
+    document.getElementById('modal-add').classList.remove('hidden');
+    setTimeout(() => document.getElementById('modal-channel-id').focus(), 50);
+  }
+  async function confirmAddChannel() {
+    const id    = document.getElementById('modal-channel-id').value.trim();
+    const errEl = document.getElementById('modal-error');
+    const btn   = document.getElementById('modal-add-btn');
+    errEl.innerHTML = '';
+    if (!id)                    { errEl.innerHTML = '<div class="error-box">⚠ Ingresá un Channel ID.</div>'; return; }
+    if (channelIds.includes(id)) { errEl.innerHTML = '<div class="error-box">⚠ Ese canal ya está en el dashboard.</div>'; return; }
+    btn.disabled = true; btn.textContent = 'Cargando...';
+    try {
+      const data = await fetchChannel(id);
+      if (!data) throw new Error('Canal no encontrado.');
+      channelIds.push(id); channelsData[id] = data;
+      if (!data.hiddenSubs) subSnapshots[id] = data.subscribers;
+      const allVids = [...(data.topVideos || []), ...(data.latestVideos || [])];
+      allVids.forEach(v => { videoSnapshots[v.id] = { views: v.views, likes: v.likes }; });
+      persistConfig(); closeModal('modal-add'); renderTabs(); switchTab(id);
+    } catch (e) {
+      errEl.innerHTML = `<div class="error-box">⚠ ${e.message}</div>`;
+      btn.disabled = false; btn.textContent = 'Agregar →';
+    }
+  }
+  function removeChannel(id, e) {
+    e.stopPropagation();
+    channelIds = channelIds.filter(c => c !== id);
+    delete channelsData[id]; delete subSnapshots[id]; delete sessionDeltas[id];
+    persistConfig();
+    if (!channelIds.length) {
+      document.getElementById('main').style.display = 'none';
+      document.getElementById('setup').style.display = 'block';
+      ['poll-bar','refresh-btn','settings-btn'].forEach(x => document.getElementById(x).classList.add('hidden'));
+      return;
+    }
+    renderTabs();
+    if (activeChannelId === id) activeChannelId = channelIds[0];
+    switchTab(activeChannelId);
+  }
+
+  function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.querySelectorAll('.modal-overlay').forEach(m => m.classList.add('hidden'));
+  });
+
+  function refreshData() { channelsData = {}; videoSnapshots = {}; loadAllChannels(); }
+
+  // ── LOAD ALL CHANNELS ─────────────────────────────────────────────────────
+  async function loadAllChannels() {
+    document.getElementById('channel-tabs').innerHTML = '';
+    document.getElementById('channel-content').innerHTML =
+      `<div class="loading"><div class="spinner"></div><span>Cargando canales...</span></div>`;
+
+    const results = await Promise.allSettled(channelIds.map(id => fetchChannel(id)));
+    channelsData = {};
+    results.forEach((r, i) => { if (r.status === 'fulfilled' && r.value) channelsData[channelIds[i]] = r.value; });
+
+    const loaded = channelIds.filter(id => channelsData[id]);
+    if (!loaded.length) {
+      document.getElementById('channel-content').innerHTML =
+        `<div class="error-box">⚠ No se pudo cargar ningún canal. Verificá la API Key y los Channel IDs.</div>`;
+      return;
+    }
+    loaded.forEach(id => {
+      const ch = channelsData[id];
+      if (!ch.hiddenSubs) subSnapshots[id] = ch.subscribers;
+      const allVids = [...(ch.topVideos || []), ...(ch.latestVideos || [])];
+      allVids.forEach(v => { videoSnapshots[v.id] = { views: v.views, likes: v.likes }; });
+    });
+
+    renderTabs();
+    activeChannelId = loaded[0];
+    switchTab(activeChannelId);
+    updateTimestamp();
+  }
+
+  function renderTabs() {
+    const tabs = document.getElementById('channel-tabs');
+    tabs.innerHTML = '';
+    channelIds.forEach(id => {
+      const ch = channelsData[id];
+      if (!ch) return;
+      const tab = document.createElement('div');
+      tab.className = 'tab' + (id === activeChannelId ? ' active' : '');
+      tab.dataset.id = id;
+      tab.onclick = () => switchTab(id);
+      tab.innerHTML = `
+        ${ch.thumbnail ? `<img src="${ch.thumbnail}" alt="" />` : ''}
+        ${escHtml(ch.title)}
+        <span class="tab-remove" onclick="removeChannel('${id}', event)">×</span>`;
+      tabs.appendChild(tab);
+    });
+  }
+
+  function switchTab(id) {
+    activeChannelId = id;
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.id === id));
+    renderChannel(id);
+  }
+
+  // ── FETCH ─────────────────────────────────────────────────────────────────
+  async function fetchChannel(channelId) {
+    const chRes = await yt('channels', { part: 'snippet,statistics,contentDetails', id: channelId });
+    if (!chRes.items?.length) throw new Error(`Canal "${channelId}" no encontrado.`);
+    const ch = chRes.items[0];
+    const uploadsId = ch.contentDetails.relatedPlaylists.uploads;
+    // Fetch enough IDs to cover both top-by-views and latest-by-date
+    const fetchCount = Math.max(topN * 3, topN * 2);
+    const videoIds   = await getUploadedVideoIds(uploadsId, fetchCount);
+    // playlist returns IDs in reverse-chrono order → first topN = most recent
+    const latestIds  = videoIds.slice(0, topN);
+    const allVideos  = await fetchVideoStats(videoIds);
+    // Top N by views
+    const topVideos    = [...allVideos].sort((a, b) => b.views - a.views).slice(0, topN);
+    // Latest N: preserve playlist order (newest first), using the latestIds set
+    const latestSet    = new Set(latestIds);
+    const latestVideos = allVideos.filter(v => latestSet.has(v.id))
+                                  .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt))
+                                  .slice(0, topN);
+    return {
+      id: channelId,
+      title: ch.snippet.title,
+      thumbnail: ch.snippet.thumbnails?.default?.url,
+      customUrl: ch.snippet.customUrl,
+      publishedAt: ch.snippet.publishedAt,
+      subscribers: parseInt(ch.statistics.subscriberCount || 0),
+      hiddenSubs: ch.statistics.hiddenSubscriberCount,
+      totalViews: parseInt(ch.statistics.viewCount || 0),
+      videoCount: parseInt(ch.statistics.videoCount || 0),
+      topVideos: topVideos,
+      latestVideos: latestVideos,
+    };
+  }
+  async function getUploadedVideoIds(uploadsPlaylistId, maxResults) {
+    const ids = []; let pageToken = '';
+    while (ids.length < maxResults) {
+      const params = { part: 'contentDetails', playlistId: uploadsPlaylistId, maxResults: Math.min(50, maxResults - ids.length) };
+      if (pageToken) params.pageToken = pageToken;
+      const res = await yt('playlistItems', params);
+      if (!res.items?.length) break;
+      res.items.forEach(item => ids.push(item.contentDetails.videoId));
+      pageToken = res.nextPageToken || '';
+      if (!pageToken) break;
+    }
+    return ids;
+  }
+  async function fetchVideoStats(videoIds) {
+    if (!videoIds.length) return [];
+    const videos = [];
+    for (let i = 0; i < videoIds.length; i += 50) {
+      const res = await yt('videos', { part: 'snippet,statistics', id: videoIds.slice(i, i+50).join(',') });
+      if (res.items) res.items.forEach(v => videos.push({
+        id: v.id, title: v.snippet.title,
+        thumbnail: v.snippet.thumbnails?.medium?.url || v.snippet.thumbnails?.default?.url,
+        publishedAt: v.snippet.publishedAt,
+        views: parseInt(v.statistics.viewCount || 0),
+        likes: parseInt(v.statistics.likeCount || 0),
+        comments: parseInt(v.statistics.commentCount || 0),
+      }));
+    }
+    return videos;
+  }
+  async function yt(endpoint, params) {
+    const url = new URL(`${API_BASE}/${endpoint}`);
+    url.searchParams.set('key', apiKey);
+    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+    const res = await fetch(url.toString());
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error?.message || `HTTP ${res.status}`); }
+    return res.json();
+  }
+
+  // ── RENDER CHANNEL ────────────────────────────────────────────────────────
+  function renderChannel(id) {
+    const ch = channelsData[id];
+    const content = document.getElementById('channel-content');
+    const ytUrl = ch.customUrl ? `https://youtube.com/${ch.customUrl}` : `https://youtube.com/channel/${id}`;
+    const delta = sessionDeltas[id] || 0;
+    const top8  = ch.topVideos.slice(0, 8);
+    // For "activity recent" use latestVideos if available (more accurate for recency)
+    const activitySource = ch.latestVideos?.length ? ch.latestVideos : ch.topVideos;
+    const activity   = recentActivity(activitySource);
+    const concPct    = top3Concentration(ch.totalViews, ch.topVideos);
+    const cmtRate    = commentRate(top8);
+
+    content.innerHTML = `
+      <!-- Profile -->
+      <div class="channel-profile">
+        ${ch.thumbnail ? `<img src="${ch.thumbnail}" alt="${escHtml(ch.title)}" />` : ''}
+        <div class="info">
+          <h2>${escHtml(ch.title)}</h2>
+          <p>${ch.customUrl || id} · Canal desde ${formatYear(ch.publishedAt)}</p>
+        </div>
+        <a class="yt-link" href="${ytUrl}" target="_blank">Ver canal →</a>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-grid">
+        <div class="stat-card red">
+          <div class="label">🔴 Suscriptores</div>
+          <div class="value">
+            ${ch.hiddenSubs ? '—' : fmt(ch.subscribers)}
+            ${!ch.hiddenSubs && delta ? `<span class="delta ${delta > 0 ? 'up' : 'down'}">${delta > 0 ? '▲' : '▼'} ${fmt(Math.abs(delta))}</span>` : ''}
+          </div>
+          <div class="sub">${ch.hiddenSubs ? 'Ocultos por el canal' : delta ? `${delta > 0 ? '+' : ''}${fmt(delta)} esta sesión` : 'Total acumulado'}</div>
+        </div>
+        <div class="stat-card blue">
+          <div class="label">👁 Vistas totales</div>
+          <div class="value">${fmt(ch.totalViews)}</div>
+          <div class="sub">Desde la creación</div>
+        </div>
+        <div class="stat-card green">
+          <div class="label">🎬 Videos</div>
+          <div class="value">${fmt(ch.videoCount)}</div>
+          <div class="sub">Videos públicos</div>
+        </div>
+        <div class="stat-card yellow">
+          <div class="label">📊 Engagement</div>
+          <div class="value">${engagementRate(top8)}%</div>
+          <div class="sub">Likes / vistas (top videos)</div>
+        </div>
+        <div class="stat-card blue">
+          <div class="label">💬 Tasa comentarios</div>
+          <div class="value">${cmtRate}%</div>
+          <div class="sub">Comentarios / vistas (top videos)</div>
+        </div>
+        <div class="stat-card ${activity.daysSince === null ? '' : activity.daysSince <= 7 ? 'green' : activity.daysSince <= 30 ? 'yellow' : 'red'}">
+          <div class="label">📅 Último video</div>
+          <div class="value">${activity.daysSince === null ? '—' : activity.daysSince === 0 ? 'Hoy' : `${activity.daysSince}d`}</div>
+          <div class="sub">${activity.last30} video${activity.last30 !== 1 ? 's' : ''} en los últimos 30 días</div>
+        </div>
+        <div class="stat-card ${concPct === null ? '' : concPct >= 80 ? 'red' : concPct >= 50 ? 'yellow' : 'green'}">
+          <div class="label">🎯 Concentración top 3</div>
+          <div class="value">${concPct === null ? '—' : concPct + '%'}</div>
+          <div class="sub">De las vistas totales del canal</div>
+        </div>
+      </div>
+
+      <!-- Monetización -->
+      <div class="section-title">💸 Targets de monetización <span class="tag">YouTube Partner Program</span></div>
+      <div class="monetization-grid">
+        ${MONO_MILESTONES.map(m => monoCard(m, ch.subscribers, ch.hiddenSubs)).join('')}
+      </div>
+      ${ch.hiddenSubs ? '' : `<div class="mono-note">⚠ Las <strong>4,000 horas de visualización</strong> requeridas para el YPP Completo no están disponibles vía API pública — necesitás revisarlas en YouTube Studio → Analytics → Alcance.</div>`}
+
+      <!-- Gráficos -->
+      <div class="section-title">📈 Performance <span class="tag">Top ${top8.length} videos</span></div>
+      <div class="charts-grid">
+        <div class="chart-card">
+          <div class="chart-card-title">👁 Vistas por video <span class="chart-sub">top ${top8.length}</span></div>
+          <div class="chart-wrap"><canvas id="chart-views"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-card-title">👍 Engagement rate <span class="chart-sub">likes / vistas %</span></div>
+          <div class="chart-wrap"><canvas id="chart-engagement"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-card-title">💬 Comentarios por video <span class="chart-sub">top ${top8.length}</span></div>
+          <div class="chart-wrap"><canvas id="chart-comments"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-card-title">🎯 Views vs Likes <span class="chart-sub">top ${top8.length}</span></div>
+          <div class="chart-wrap"><canvas id="chart-compare"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Videos table -->
+      <div class="section-title">
+        ${videoSortMode === 'top' ? '🏆' : '🕐'} ${videoSortMode === 'top' ? ch.topVideos.length : (ch.latestVideos?.length ?? ch.topVideos.length)} videos
+        <span class="tag">${videoSortMode === 'top' ? 'Por vistas' : 'Más recientes'}</span>
+        <div class="video-sort-toggle">
+          <button class="vsort-btn ${videoSortMode === 'top' ? 'active' : ''}" onclick="setVideoSort('top')">🏆 Top</button>
+          <button class="vsort-btn ${videoSortMode === 'latest' ? 'active' : ''}" onclick="setVideoSort('latest')">🕐 Últimos</button>
+        </div>
+      </div>
+      <div class="videos-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>Miniatura</th><th>Título</th>
+              <th>👁 Vistas</th><th>% canal</th><th>👍 Likes</th><th>💬 Comentarios</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(videoSortMode === 'latest'
+                ? (ch.latestVideos ?? [...ch.topVideos].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt)))
+                : ch.topVideos
+              ).map((v, i) => {
+              const pctOfChannel = ch.totalViews > 0 ? ((v.views / ch.totalViews) * 100).toFixed(1) : null;
+              return `
+              <tr>
+                <td><div class="rank ${rankClass(i)}">${i + 1}</div></td>
+                <td><a href="https://youtube.com/watch?v=${v.id}" target="_blank">
+                  <img class="video-thumb" src="${v.thumbnail}" loading="lazy" />
+                </a></td>
+                <td class="video-title-cell">
+                  <a href="https://youtube.com/watch?v=${v.id}" target="_blank">${escHtml(v.title)}</a>
+                  <div class="pub-date">📅 ${formatDate(v.publishedAt)}</div>
+                </td>
+                <td class="num views">${fmt(v.views)}</td>
+                <td class="num" style="color:var(--muted);font-size:12px">${pctOfChannel !== null ? pctOfChannel + '%' : '—'}</td>
+                <td class="num likes">${v.likes > 0 ? fmt(v.likes) : '—'}</td>
+                <td class="num comments">${fmt(v.comments)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+      <p class="dislike-note">⚠ Los dislikes ya no son públicos desde dic. 2021 — YouTube removió ese dato de la API para canales de terceros.</p>
+    `;
+
+    // Draw charts after DOM is set
+    requestAnimationFrame(() => renderCharts(id));
+  }
+
+  // ── MONETIZATION CARD ─────────────────────────────────────────────────────
+  function monoCard(milestone, subs, hiddenSubs) {
+    if (hiddenSubs) {
+      return `
+        <div class="mono-card">
+          <div class="mono-top">
+            <div class="mono-icon">${milestone.icon}</div>
+            <div class="mono-info">
+              <div class="mono-label">${milestone.label}</div>
+              <div class="mono-desc">${milestone.desc}</div>
+            </div>
+            <span class="mono-badge todo">—</span>
+          </div>
+          <div class="progress-bar-wrap"><div class="progress-bar ${milestone.color}" style="width:0%"></div></div>
+          <div class="progress-label"><span>Subs ocultos</span></div>
+        </div>`;
+    }
+
+    const achieved = subs >= milestone.subsNeeded;
+    const pct = Math.min(100, Math.round((subs / milestone.subsNeeded) * 100));
+    const remaining = Math.max(0, milestone.subsNeeded - subs);
+
+    return `
+      <div class="mono-card ${achieved ? 'achieved' : ''}">
+        <div class="mono-top">
+          <div class="mono-icon">${milestone.icon}</div>
+          <div class="mono-info">
+            <div class="mono-label">${milestone.label}</div>
+            <div class="mono-desc">${milestone.desc}</div>
+          </div>
+          <span class="mono-badge ${achieved ? 'done' : 'todo'}">${achieved ? '✅ Logrado' : `${pct}%`}</span>
+        </div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar ${milestone.color}" style="width:${pct}%"></div>
+        </div>
+        <div class="progress-label">
+          <span>${fmt(subs)} / ${fmt(milestone.subsNeeded)}</span>
+          <span>${achieved ? 'Superado' : `Faltan ${fmt(remaining)}`}</span>
+        </div>
+      </div>`;
+  }
+
+  // ── CHARTS ────────────────────────────────────────────────────────────────
+  const CHART_DEFAULTS = {
+    color: '#f1f1f1',
+    grid: 'rgba(255,255,255,0.06)',
+    font: "'Segoe UI', system-ui, sans-serif",
+  };
+
+  function destroyChart(key) {
+    if (chartInstances[key]) { chartInstances[key].destroy(); delete chartInstances[key]; }
+  }
+
+  function renderCharts(id) {
+    const ch = channelsData[id];
+    if (!ch) return;
+    const top8 = ch.topVideos.slice(0, 8);
+    const labels = top8.map((v, i) => `#${i+1} ${truncate(v.title, 22)}`);
+
+    destroyChart('views'); destroyChart('engagement'); destroyChart('comments'); destroyChart('compare');
+
+    const baseOptions = (axis = 'x') => ({
+      indexAxis: axis,
+      responsive: true,
+      maintainAspectRatio: false,
+      clip: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: { label: ctx => ` ${fmt(ctx.raw)}` },
+          position: 'nearest',
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: CHART_DEFAULTS.color, font: { size: 11 } },
+          grid: { color: CHART_DEFAULTS.grid },
+        },
+        y: {
+          ticks: {
+            color: CHART_DEFAULTS.color,
+            font: { size: 11 },
+            crossAlign: 'far',
+          },
+          grid: { color: CHART_DEFAULTS.grid },
+        },
+      },
+    });
+
+    // 1. Views
+    const cvViews = document.getElementById('chart-views');
+    if (cvViews) {
+      chartInstances['views'] = new Chart(cvViews, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{ data: top8.map(v => v.views), backgroundColor: 'rgba(41,121,255,0.7)', borderRadius: 4 }],
+        },
+        options: {
+          ...baseOptions('y'),
+          plugins: { ...baseOptions('y').plugins, tooltip: { callbacks: { label: ctx => ` ${fmt(ctx.raw)} vistas` } } },
+        },
+      });
+    }
+
+    // 2. Engagement rate
+    const cvEng = document.getElementById('chart-engagement');
+    if (cvEng) {
+      const rates = top8.map(v => v.views > 0 ? +((v.likes / v.views) * 100).toFixed(2) : 0);
+      chartInstances['engagement'] = new Chart(cvEng, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{ data: rates, backgroundColor: 'rgba(0,200,83,0.7)', borderRadius: 4 }],
+        },
+        options: {
+          ...baseOptions('y'),
+          plugins: { ...baseOptions('y').plugins, tooltip: { callbacks: { label: ctx => ` ${ctx.raw}%` } } },
+          scales: {
+            ...baseOptions('y').scales,
+            x: { ...baseOptions('y').scales.x, ticks: { ...baseOptions('y').scales.x.ticks, callback: v => v + '%' } },
+          },
+        },
+      });
+    }
+
+    // 3. Comments
+    const cvComments = document.getElementById('chart-comments');
+    if (cvComments) {
+      chartInstances['comments'] = new Chart(cvComments, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{ data: top8.map(v => v.comments), backgroundColor: 'rgba(170,0,255,0.7)', borderRadius: 4 }],
+        },
+        options: {
+          ...baseOptions('y'),
+          plugins: { ...baseOptions('y').plugins, tooltip: { callbacks: { label: ctx => ` ${fmt(ctx.raw)} comentarios` } } },
+        },
+      });
+    }
+
+    // 4. Views vs Likes
+    const cvCompare = document.getElementById('chart-compare');
+    if (cvCompare) {
+      chartInstances['compare'] = new Chart(cvCompare, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Vistas', data: top8.map(v => v.views), backgroundColor: 'rgba(41,121,255,0.6)', borderRadius: 4 },
+            { label: 'Likes',  data: top8.map(v => v.likes), backgroundColor: 'rgba(0,200,83,0.6)',   borderRadius: 4 },
+          ],
+        },
+        options: {
+          ...baseOptions('y'),
+          plugins: {
+            legend: { display: true, labels: { color: CHART_DEFAULTS.color, font: { size: 11 } } },
+            tooltip: { callbacks: { label: ctx => ` ${fmt(ctx.raw)} ${ctx.dataset.label.toLowerCase()}` } },
+          },
+        },
+      });
+    }
+  }
+
+  // ── HELPERS ───────────────────────────────────────────────────────────────
+  function fmt(n) {
+    if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + 'B';
+    if (n >= 1_000_000)     return (n / 1_000_000).toFixed(1) + 'M';
+    if (n >= 1_000)         return (n / 1_000).toFixed(1) + 'K';
+    return n.toLocaleString('es-AR');
+  }
+  function formatDate(iso) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+  function formatYear(iso) { return iso ? new Date(iso).getFullYear() : ''; }
+  function formatTime(d)   { return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+  function rankClass(i)    { return ['gold','silver','bronze'][i] || ''; }
+  function truncate(s, n)  { return (s||'').length > n ? (s||'').slice(0, n) + '…' : (s||''); }
+  function escHtml(s) {
+    return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function updateTimestamp() {
+    const el = document.getElementById('last-updated');
+    el.classList.remove('hidden');
+    el.textContent = `Act. ${new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`;
+  }
+  function engagementRate(videos) {
+    const totalViews = videos.reduce((s, v) => s + v.views, 0);
+    const totalLikes = videos.reduce((s, v) => s + v.likes, 0);
+    if (!totalViews) return '0.00';
+    return ((totalLikes / totalViews) * 100).toFixed(2);
+  }
+
+  function commentRate(videos) {
+    const totalViews    = videos.reduce((s, v) => s + v.views,    0);
+    const totalComments = videos.reduce((s, v) => s + v.comments, 0);
+    if (!totalViews) return '0.00';
+    return ((totalComments / totalViews) * 100).toFixed(2);
+  }
+
+  function recentActivity(videos) {
+    if (!videos.length) return { daysSince: null, last30: 0 };
+    const now = Date.now();
+    const MS_30D = 30 * 24 * 60 * 60 * 1000;
+    const sorted = [...videos].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+    const latestMs = new Date(sorted[0].publishedAt).getTime();
+    const daysSince = Math.floor((now - latestMs) / (24 * 60 * 60 * 1000));
+    const last30 = videos.filter(v => now - new Date(v.publishedAt).getTime() < MS_30D).length;
+    return { daysSince, last30 };
+  }
+
+  function top3Concentration(totalChannelViews, videos) {
+    if (!totalChannelViews || !videos.length) return null;
+    const top3Views = videos.slice(0, 3).reduce((s, v) => s + v.views, 0);
+    return Math.round((top3Views / totalChannelViews) * 100);
+  }
+
+  init();
+</script>
+</body>
+</html>
