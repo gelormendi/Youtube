@@ -522,7 +522,10 @@
       display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     }
     .video-title-cell a:hover { color: var(--red); }
-    .video-title-cell .pub-date { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .video-title-cell .pub-date { font-size: 11px; color: var(--muted); margin-top: 3px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .video-type-badge { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; letter-spacing: 0.3px; }
+    .badge-short { background: rgba(255,0,0,0.15); color: #ff6b6b; }
+    .badge-video { background: rgba(41,121,255,0.12); color: #82b1ff; }
     .num { font-variant-numeric: tabular-nums; font-weight: 700; }
     .num.views    { color: var(--text); }
     .num.likes    { color: var(--green); }
@@ -721,7 +724,7 @@
   const API_BASE = 'https://www.googleapis.com/youtube/v3';
   let apiKey = '';
   let channelIds = [];
-  let topN = 10;
+  let topN = 25;
   let channelsData = {};
   let activeChannelId = null;
 
@@ -983,10 +986,18 @@
   }
 
   async function pollVideoStats() {
-    const allIds = [], vidToCh = {};
+    const vidToCh = {};
+    const seen = new Set();
     for (const chId of channelIds) {
-      (channelsData[chId]?.topVideos || []).forEach(v => { allIds.push(v.id); vidToCh[v.id] = chId; });
+      const allVids = [
+        ...(channelsData[chId]?.topVideos    || []),
+        ...(channelsData[chId]?.latestVideos || []),
+      ];
+      allVids.forEach(v => {
+        if (!seen.has(v.id)) { seen.add(v.id); vidToCh[v.id] = chId; }
+      });
     }
+    const allIds = [...seen];
     if (!allIds.length) return;
 
     for (let i = 0; i < allIds.length; i += 50) {
@@ -1105,7 +1116,7 @@
   function init() {
     const saved = loadConfig();
     if (saved?.apiKey && saved?.channelIds?.length) {
-      apiKey = saved.apiKey; channelIds = saved.channelIds; topN = saved.topN || 10;
+      apiKey = saved.apiKey; channelIds = saved.channelIds; topN = saved.topN || 25;
       enterDashboard(); loadAllChannels();
     }
   }
@@ -1157,7 +1168,7 @@
   }
   function saveSettings() {
     const key = document.getElementById('settings-api-key').value.trim();
-    const n   = parseInt(document.getElementById('settings-top-n').value) || 10;
+    const n   = parseInt(document.getElementById('settings-top-n').value) || 25;
     if (!key) return;
     apiKey = key; topN = n; persistConfig();
     closeModal('modal-settings'); channelsData = {}; loadAllChannels();
@@ -1315,19 +1326,31 @@
     }
     return ids;
   }
+  function parseDuration(iso) {
+    if (!iso) return 0;
+    const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!m) return 0;
+    return (parseInt(m[1] || 0) * 3600) + (parseInt(m[2] || 0) * 60) + parseInt(m[3] || 0);
+  }
+
   async function fetchVideoStats(videoIds) {
     if (!videoIds.length) return [];
     const videos = [];
     for (let i = 0; i < videoIds.length; i += 50) {
-      const res = await yt('videos', { part: 'snippet,statistics', id: videoIds.slice(i, i+50).join(',') });
-      if (res.items) res.items.forEach(v => videos.push({
-        id: v.id, title: v.snippet.title,
-        thumbnail: v.snippet.thumbnails?.medium?.url || v.snippet.thumbnails?.default?.url,
-        publishedAt: v.snippet.publishedAt,
-        views: parseInt(v.statistics.viewCount || 0),
-        likes: parseInt(v.statistics.likeCount || 0),
-        comments: parseInt(v.statistics.commentCount || 0),
-      }));
+      const res = await yt('videos', { part: 'snippet,statistics,contentDetails', id: videoIds.slice(i, i+50).join(',') });
+      if (res.items) res.items.forEach(v => {
+        const durationSec = parseDuration(v.contentDetails?.duration);
+        videos.push({
+          id: v.id, title: v.snippet.title,
+          thumbnail: v.snippet.thumbnails?.medium?.url || v.snippet.thumbnails?.default?.url,
+          publishedAt: v.snippet.publishedAt,
+          views:    parseInt(v.statistics.viewCount    || 0),
+          likes:    parseInt(v.statistics.likeCount    || 0),
+          comments: parseInt(v.statistics.commentCount || 0),
+          durationSec,
+          isShort: durationSec > 0 && durationSec <= 60,
+        });
+      });
     }
     return videos;
   }
@@ -1476,8 +1499,11 @@
                   <img class="video-thumb" src="${v.thumbnail}" loading="lazy" />
                 </a></td>
                 <td class="video-title-cell">
-                  <a href="https://youtube.com/watch?v=${v.id}" target="_blank">${escHtml(v.title)}</a>
-                  <div class="pub-date">📅 ${formatDate(v.publishedAt)}</div>
+                  <a href="${v.isShort ? `https://youtube.com/shorts/${v.id}` : `https://youtube.com/watch?v=${v.id}`}" target="_blank">${escHtml(v.title)}</a>
+                  <div class="pub-date">
+                    <span class="video-type-badge ${v.isShort ? 'badge-short' : 'badge-video'}">${v.isShort ? '📱 Short' : '🎬 Video'}</span>
+                    📅 ${formatDate(v.publishedAt)}
+                  </div>
                 </td>
                 <td class="num views">${fmt(v.views)}</td>
                 <td class="num" style="color:var(--muted);font-size:12px">${pctOfChannel !== null ? pctOfChannel + '%' : '—'}</td>
@@ -1552,7 +1578,9 @@
     const ch = channelsData[id];
     if (!ch) return;
     const top8 = ch.topVideos.slice(0, 8);
-    const labels = top8.map((v, i) => `#${i+1} ${truncate(v.title, 22)}`);
+    const labels     = top8.map((v, i) => `#${i+1} ${truncate(v.title, 22)}`);
+    const fullTitles = top8.map((v, i) => `#${i+1} — ${v.title}`);
+    const titleCb    = ctx => fullTitles[ctx[0]?.dataIndex ?? 0];
 
     destroyChart('views'); destroyChart('engagement'); destroyChart('comments'); destroyChart('compare');
     destroyChart('velocity'); destroyChart('discuss');
@@ -1596,7 +1624,7 @@
         },
         options: {
           ...baseOptions('y'),
-          plugins: { ...baseOptions('y').plugins, tooltip: { callbacks: { label: ctx => ` ${fmt(ctx.raw)} vistas` } } },
+          plugins: { ...baseOptions('y').plugins, tooltip: { callbacks: { title: titleCb, label: ctx => ` ${fmt(ctx.raw)} vistas` } } },
         },
       });
     }
@@ -1613,7 +1641,7 @@
         },
         options: {
           ...baseOptions('y'),
-          plugins: { ...baseOptions('y').plugins, tooltip: { callbacks: { label: ctx => ` ${ctx.raw}%` } } },
+          plugins: { ...baseOptions('y').plugins, tooltip: { callbacks: { title: titleCb, label: ctx => ` ${ctx.raw}%` } } },
           scales: {
             ...baseOptions('y').scales,
             x: { ...baseOptions('y').scales.x, ticks: { ...baseOptions('y').scales.x.ticks, callback: v => v + '%' } },
@@ -1633,7 +1661,7 @@
         },
         options: {
           ...baseOptions('y'),
-          plugins: { ...baseOptions('y').plugins, tooltip: { callbacks: { label: ctx => ` ${fmt(ctx.raw)} comentarios` } } },
+          plugins: { ...baseOptions('y').plugins, tooltip: { callbacks: { title: titleCb, label: ctx => ` ${fmt(ctx.raw)} comentarios` } } },
         },
       });
     }
@@ -1654,7 +1682,7 @@
           ...baseOptions('y'),
           plugins: {
             legend: { display: true, labels: { color: CHART_DEFAULTS.color, font: { size: 11 } } },
-            tooltip: { callbacks: { label: ctx => ` ${fmt(ctx.raw)} ${ctx.dataset.label.toLowerCase()}` } },
+            tooltip: { callbacks: { title: titleCb, label: ctx => ` ${fmt(ctx.raw)} ${ctx.dataset.label.toLowerCase()}` } },
           },
         },
       });
@@ -1678,7 +1706,7 @@
           ...baseOptions('y'),
           plugins: {
             legend: { display: false },
-            tooltip: { callbacks: { label: ctx => ` ${fmt(ctx.raw)} vistas/día` }, position: 'nearest' },
+            tooltip: { callbacks: { title: titleCb, label: ctx => ` ${fmt(ctx.raw)} vistas/día` }, position: 'nearest' },
           },
         },
       });
@@ -1698,7 +1726,7 @@
           ...baseOptions('y'),
           plugins: {
             legend: { display: false },
-            tooltip: { callbacks: { label: ctx => ` ${ctx.raw} comentarios por like` }, position: 'nearest' },
+            tooltip: { callbacks: { title: titleCb, label: ctx => ` ${ctx.raw} comentarios por like` }, position: 'nearest' },
           },
         },
       });
